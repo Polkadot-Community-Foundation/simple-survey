@@ -1,36 +1,54 @@
 import {
     useState, useEffect, useMemo, useCallback, useRef, type ReactNode,
 } from "react";
-import { createCdm } from "@dotdm/cdm";
 import { FixedSizeBinary } from "polkadot-api";
 import {
     ACCOUNTS, deriveWallet, short, publishBlob, IPFS_GATEWAY,
-    type Wallet,
+    useHostAccount, getSurveyContract,
+    type Wallet, type HostAccount,
 } from "./utils.ts";
 import type { SurveyData, ResponseData, SurveyListItem, Question } from "./types.ts";
-import cdmJson from "../cdm.json";
-
-// ---------------------------------------------------------------------------
-// CDM — one connection for the lifetime of the page
-// ---------------------------------------------------------------------------
-
-const cdm = createCdm(cdmJson);
-const sv = cdm.getContract("@example/surveys");
 
 const toBytes = (hex: string) => FixedSizeBinary.fromHex(hex);
+
+const ALICE_ORIGIN = deriveWallet(ACCOUNTS[0].mnemonic).address;
 
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 
 export default function App() {
-    const [accountIdx, setAccountIdx] = useState(0);
-    const wallet = useMemo<Wallet>(() => deriveWallet(ACCOUNTS[accountIdx].mnemonic), [accountIdx]);
-    const me = ACCOUNTS[accountIdx].ethAddress;
+    const { hostAccounts, loading: hostLoading } = useHostAccount();
 
+    // accountKey: "host:0", "host:1" = host accounts, "dev:0".."dev:N" = dev accounts
+    const [accountKey, setAccountKey] = useState<string>("dev:0");
+
+    // Default to first host account when available
     useEffect(() => {
-        cdm.setDefaults({ origin: wallet.address, signer: wallet.signer });
-    }, [wallet]);
+        if (!hostLoading && hostAccounts.length > 0) {
+            setAccountKey("host:0");
+        }
+    }, [hostLoading, hostAccounts]);
+
+    const wallet = useMemo<Wallet>(() => {
+        if (accountKey.startsWith("host:")) {
+            const idx = parseInt(accountKey.split(":")[1]);
+            const ha = hostAccounts[idx];
+            if (ha) return { signer: ha.signer, address: ha.address };
+        }
+        const idx = parseInt(accountKey.split(":")[1]) || 0;
+        return deriveWallet(ACCOUNTS[idx].mnemonic);
+    }, [accountKey, hostAccounts]);
+
+    const me = useMemo(() => {
+        if (accountKey.startsWith("host:")) {
+            const idx = parseInt(accountKey.split(":")[1]);
+            const ha = hostAccounts[idx];
+            if (ha) return ha.ethAddress;
+        }
+        const idx = parseInt(accountKey.split(":")[1]) || 0;
+        return ACCOUNTS[idx].ethAddress;
+    }, [accountKey, hostAccounts]);
 
     const [view, setView] = useState<
         | { page: "list" }
@@ -47,10 +65,15 @@ export default function App() {
                 <h1>Surveys</h1>
                 <select
                     className="account-select"
-                    value={accountIdx}
-                    onChange={e => setAccountIdx(Number(e.target.value))}
+                    value={accountKey}
+                    onChange={e => setAccountKey(e.target.value)}
                 >
-                    {ACCOUNTS.map((a, i) => <option key={i} value={i}>{a.name}</option>)}
+                    {hostAccounts.map((ha, i) => (
+                        <option key={`host:${i}`} value={`host:${i}`}>{ha.name}</option>
+                    ))}
+                    {ACCOUNTS.map((a, i) => (
+                        <option key={`dev:${i}`} value={`dev:${i}`}>{a.name}</option>
+                    ))}
                 </select>
             </header>
 
@@ -62,7 +85,7 @@ export default function App() {
 
             {view.page === "list" && (
                 <SurveyList
-                    key={refreshKey}
+                    key={`${refreshKey}-${accountKey}`}
                     onFill={id => setView({ page: "fill", surveyId: id })}
                     onResults={id => setView({ page: "results", surveyId: id })}
                 />
@@ -103,10 +126,12 @@ function SurveyList({ onFill, onResults }: {
         let cancelled = false;
         (async () => {
             try {
+                const contract = await getSurveyContract();
                 console.log("[SurveyList] Querying contract for survey count...");
-                const countRes = await sv.getSurveyCount.query();
+                const countRes = await contract.query("getSurveyCount", { origin: ALICE_ORIGIN });
+                console.log("[SurveyList] getSurveyCount result:", countRes);
                 if (!countRes.success || cancelled) return;
-                const count = Number(countRes.value);
+                const count = Number(countRes.value.response);
                 console.log("[SurveyList] Total surveys on-chain:", count);
 
                 const items: SurveyListItem[] = [];
@@ -114,28 +139,27 @@ function SurveyList({ onFill, onResults }: {
                     if (cancelled) return;
                     console.log("[SurveyList] Fetching survey #%d from contract...", i);
                     const [cidRes, creatorRes, respRes] = await Promise.all([
-                        sv.getSurveyCid.query(BigInt(i)),
-                        sv.getSurveyCreator.query(BigInt(i)),
-                        sv.getResponseCount.query(BigInt(i)),
+                        contract.query("getSurveyCid", { origin: ALICE_ORIGIN, data: { survey_id: BigInt(i) } }),
+                        contract.query("getSurveyCreator", { origin: ALICE_ORIGIN, data: { survey_id: BigInt(i) } }),
+                        contract.query("getResponseCount", { origin: ALICE_ORIGIN, data: { survey_id: BigInt(i) } }),
                     ]);
 
-                    const cid = cidRes.success ? cidRes.value : "";
+                    const cid = cidRes.success ? cidRes.value.response : "";
                     const creator = creatorRes.success
-                        ? "0x" + [...creatorRes.value.asBytes()].map((b: number) => b.toString(16).padStart(2, "0")).join("")
+                        ? "0x" + [...creatorRes.value.response.asBytes()].map((b: number) => b.toString(16).padStart(2, "0")).join("")
                         : "";
-                    const responseCount = respRes.success ? Number(respRes.value) : 0;
-                    console.log("[SurveyList] Survey #%d — CID: %s, creator: %s, responses: %d", i, cid, short(creator), responseCount);
+                    const responseCount = respRes.success ? Number(respRes.value.response) : 0;
+                    console.log("[SurveyList] Survey #%d — CID:", i, cid, "creator:", short(creator), "responses:", responseCount);
 
                     const item: SurveyListItem = { id: i, cid, creator, responseCount };
 
-                    // Fetch survey data from Bulletin
                     if (cid) {
                         try {
-                            console.log("[SurveyList] Fetching survey #%d data from Bulletin: %s", i, IPFS_GATEWAY + cid);
+                            console.log("[SurveyList] Fetching survey data from Bulletin:", IPFS_GATEWAY + cid);
                             const resp = await fetch(IPFS_GATEWAY + cid);
                             if (resp.ok) {
                                 item.data = await resp.json();
-                                console.log("[SurveyList] Survey #%d data loaded: \"%s\"", i, item.data?.title);
+                                console.log("[SurveyList] Survey #%d loaded:", i, item.data?.title);
                             }
                         } catch { /* gateway might be slow */ }
                     }
@@ -215,17 +239,23 @@ function FillSurvey({ surveyId, wallet, me, onDone }: {
         let cancelled = false;
         (async () => {
             try {
-                // Check if already responded
-                const hasRes = await sv.hasResponded.query(BigInt(surveyId), toBytes(me));
-                if (!cancelled && hasRes.success && hasRes.value) {
+                const contract = await getSurveyContract();
+
+                const hasRes = await contract.query("hasResponded", {
+                    origin: ALICE_ORIGIN,
+                    data: { survey_id: BigInt(surveyId), user: toBytes(me) },
+                });
+                if (!cancelled && hasRes.success && hasRes.value.response) {
                     setAlreadyResponded(true);
                 }
 
-                // Fetch survey data
-                const cidRes = await sv.getSurveyCid.query(BigInt(surveyId));
+                const cidRes = await contract.query("getSurveyCid", {
+                    origin: ALICE_ORIGIN,
+                    data: { survey_id: BigInt(surveyId) },
+                });
                 if (!cidRes.success || cancelled) return;
 
-                const resp = await fetch(IPFS_GATEWAY + cidRes.value);
+                const resp = await fetch(IPFS_GATEWAY + cidRes.value.response);
                 if (!resp.ok || cancelled) return;
 
                 const data: SurveyData = await resp.json();
@@ -264,16 +294,16 @@ function FillSurvey({ surveyId, wallet, me, onDone }: {
 
             setStatus("Uploading response to Bulletin...");
             const bytes = new TextEncoder().encode(JSON.stringify(responseData));
-            console.log("[FillSurvey] Uploading response to Bulletin Chain (%d bytes)...", bytes.length);
             const responseCid = await publishBlob(bytes, wallet.signer);
             console.log("[FillSurvey] Bulletin upload complete. Response CID:", responseCid);
-            console.log("[FillSurvey] Gateway URL:", IPFS_GATEWAY + responseCid);
 
             setStatus("Submitting response on-chain...");
-            console.log("[FillSurvey] Calling contract submitResponse(surveyId=%d, cid=%s)...", surveyId, responseCid);
-            const txResult = await sv.submitResponse.tx(BigInt(surveyId), responseCid);
+            const contract = await getSurveyContract();
+            const tx = contract.send("submitResponse", {
+                data: { survey_id: BigInt(surveyId), response_cid: responseCid },
+            });
+            const txResult = await tx.signAndSubmit(wallet.signer);
             console.log("[FillSurvey] Contract tx result:", txResult);
-            console.log("[FillSurvey] Response submitted successfully!");
 
             onDone();
         } catch (err) {
@@ -341,44 +371,42 @@ function SurveyResults({ surveyId }: { surveyId: number }) {
         let cancelled = false;
         (async () => {
             try {
-                // Fetch survey data
-                console.log("[Results] Querying contract for survey #%d CID...", surveyId);
-                const cidRes = await sv.getSurveyCid.query(BigInt(surveyId));
-                if (!cidRes.success || cancelled) return;
-                console.log("[Results] Survey CID:", cidRes.value);
+                const contract = await getSurveyContract();
 
-                console.log("[Results] Fetching survey data from Bulletin: %s", IPFS_GATEWAY + cidRes.value);
-                const resp = await fetch(IPFS_GATEWAY + cidRes.value);
+                const cidRes = await contract.query("getSurveyCid", {
+                    origin: ALICE_ORIGIN,
+                    data: { survey_id: BigInt(surveyId) },
+                });
+                if (!cidRes.success || cancelled) return;
+                const surveyCid = cidRes.value.response;
+
+                const resp = await fetch(IPFS_GATEWAY + surveyCid);
                 if (!resp.ok || cancelled) return;
                 const data: SurveyData = await resp.json();
-                console.log("[Results] Survey data loaded:", data.title);
                 setSurvey(data);
 
-                // Fetch response count
-                console.log("[Results] Querying contract for response count...");
-                const countRes = await sv.getResponseCount.query(BigInt(surveyId));
+                const countRes = await contract.query("getResponseCount", {
+                    origin: ALICE_ORIGIN,
+                    data: { survey_id: BigInt(surveyId) },
+                });
                 if (!countRes.success || cancelled) return;
-                const count = Number(countRes.value);
-                console.log("[Results] Total responses on-chain:", count);
+                const count = Number(countRes.value.response);
                 setTotalResponses(count);
 
-                // Initialize tallies: [question][option] = count
                 const t: number[][] = data.questions.map(q => new Array(q.options.length).fill(0));
 
-                // Fetch all responses and aggregate
                 for (let i = 0; i < count; i++) {
                     if (cancelled) return;
-                    console.log("[Results] Fetching response #%d CID from contract...", i);
-                    const rCidRes = await sv.getResponseCid.query(BigInt(surveyId), BigInt(i));
+                    const rCidRes = await contract.query("getResponseCid", {
+                        origin: ALICE_ORIGIN,
+                        data: { survey_id: BigInt(surveyId), index: BigInt(i) },
+                    });
                     if (!rCidRes.success) continue;
-                    console.log("[Results] Response #%d CID:", i, rCidRes.value);
 
                     try {
-                        console.log("[Results] Fetching response #%d data from Bulletin: %s", i, IPFS_GATEWAY + rCidRes.value);
-                        const rResp = await fetch(IPFS_GATEWAY + rCidRes.value);
+                        const rResp = await fetch(IPFS_GATEWAY + rCidRes.value.response);
                         if (!rResp.ok) continue;
                         const rData: ResponseData = await rResp.json();
-                        console.log("[Results] Response #%d answers:", i, rData.answers);
 
                         rData.answers.forEach((optIdx, qIdx) => {
                             if (qIdx < t.length && optIdx >= 0 && optIdx < t[qIdx].length) {
@@ -388,7 +416,6 @@ function SurveyResults({ surveyId }: { surveyId: number }) {
                     } catch { /* skip malformed responses */ }
                 }
 
-                console.log("[Results] Final tallies:", t);
                 if (!cancelled) setTallies(t);
             } catch (err) {
                 console.error("Failed to load results:", err);
@@ -527,16 +554,16 @@ function CreateSurvey({ wallet, onCreated }: { wallet: Wallet; onCreated: () => 
 
             setStatus("Uploading survey to Bulletin...");
             const bytes = new TextEncoder().encode(JSON.stringify(surveyData));
-            console.log("[CreateSurvey] Uploading to Bulletin Chain (%d bytes)...", bytes.length);
             const cid = await publishBlob(bytes, wallet.signer);
             console.log("[CreateSurvey] Bulletin upload complete. CID:", cid);
-            console.log("[CreateSurvey] Gateway URL:", IPFS_GATEWAY + cid);
 
             setStatus("Creating survey on-chain...");
-            console.log("[CreateSurvey] Calling contract createSurvey(cid=%s)...", cid);
-            const txResult = await sv.createSurvey.tx(cid);
+            const contract = await getSurveyContract();
+            const tx = contract.send("createSurvey", {
+                data: { cid },
+            });
+            const txResult = await tx.signAndSubmit(wallet.signer);
             console.log("[CreateSurvey] Contract tx result:", txResult);
-            console.log("[CreateSurvey] Survey created successfully!");
 
             reset();
             setOpen(false);
