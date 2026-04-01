@@ -13,12 +13,12 @@
   },
   "dependencies": {
     "@dotdm/cdm": "latest",
-    "@novasamatech/product-sdk": "^0.6.12",
+    "@polkadot-apps/bulletin": "latest",
+    "@polkadot-apps/signer": "latest",
+    "@novasamatech/product-sdk": "^0.6.6",
+    "@novasamatech/host-api": "^0.6.12",
     "@polkadot-api/descriptors": "file:.papi/descriptors",
     "polkadot-api": "^1.23.3",
-    "@polkadot-labs/hdkd": "^0.0.26",
-    "@polkadot-labs/hdkd-helpers": "^0.0.27",
-    "multiformats": "^13.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
