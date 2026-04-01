@@ -8,8 +8,7 @@
     "build:frontend": "tsc -b && vite build",
     "build:contracts": "cdm build",
     "deploy": "cdm deploy -n paseo",
-    "preview": "vite preview",
-    "postinstall": "papi"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@dotdm/cdm": "latest",
@@ -17,7 +16,6 @@
     "@polkadot-apps/signer": "latest",
     "@novasamatech/product-sdk": "^0.6.6",
     "@novasamatech/host-api": "^0.6.12",
-    "@polkadot-api/descriptors": "file:.papi/descriptors",
     "polkadot-api": "^1.23.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
