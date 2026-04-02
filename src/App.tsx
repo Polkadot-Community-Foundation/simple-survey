@@ -9,8 +9,8 @@ import cdmJson from "../cdm.json";
 // CDM + Bulletin — identical pattern to playground-app
 // ---------------------------------------------------------------------------
 
-const cdm = createCdm(cdmJson);
-const sv = cdm.getContract("@example/surveys") as any;
+const cdm = createCdm(cdmJson as any);
+const sv = (cdm as any).getContract("@example/surveys");
 
 let _bulletinClient: BulletinClient | null = null;
 async function getBulletinClient() {
