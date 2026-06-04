@@ -1,32 +1,33 @@
 import { useState, useEffect } from "react";
-import { accountManager, useSignerState, short, type SurveyAccount } from "./utils.ts";
-import { uploadToBulletin, fetchJsonFromBulletin } from "./lib/bulletin/index.ts";
 import {
-    getSurveyCount,
-    getSurveyCid,
-    getSurveyCreator,
-    getResponseCount,
-    getResponseCid,
-    hasResponded,
-    createSurvey,
-    submitResponse,
-} from "./lib/contracts/index.ts";
+    useAccountState,
+    connectAccount,
+    signIn,
+    initContracts,
+    getContract,
+    uploadToBulletin,
+    fetchJsonFromBulletin,
+    ensureMapping,
+    short,
+    withTimeout,
+    type AppAccount,
+} from "./utils.ts";
 import type { SurveyData, ResponseData, SurveyListItem } from "./types.ts";
+import cdmJson from "../cdm.json";
 
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 
 export default function App() {
-    const { status, accounts, selectedAccount, error } = useSignerState();
+    const { status, account, error } = useAccountState();
 
-    // Auto-connect to the host on mount.
+    // Stage cdm.json + connect to the host on mount.
     useEffect(() => {
-        console.log("[Account] Connecting to host...");
-        accountManager.connect();
+        initContracts(cdmJson);
+        console.log("[App] Connecting account...");
+        connectAccount();
     }, []);
-
-    const account = selectedAccount;
 
     const [view, setView] = useState<
         | { page: "list" }
@@ -37,7 +38,7 @@ export default function App() {
     const [refreshKey, setRefreshKey] = useState(0);
     const refresh = () => setRefreshKey(k => k + 1);
 
-    if (status === "connecting") {
+    if (status === "idle" || status === "connecting") {
         return <div className="spinner">Connecting to host...</div>;
     }
 
@@ -45,22 +46,16 @@ export default function App() {
         <>
             <header>
                 <h1>Surveys</h1>
-                {accounts.length > 0 ? (
-                    <select
-                        className="account-select"
-                        value={account?.address ?? ""}
-                        onChange={e => accountManager.selectAccount(e.target.value)}
-                    >
-                        {accounts.map(acc => (
-                            <option key={acc.address} value={acc.address}>
-                                {acc.name ?? short(acc.address)}
-                            </option>
-                        ))}
-                    </select>
+                {status === "ready" && account ? (
+                    <span className="account-select">{account.name ?? short(account.address)}</span>
                 ) : (
-                    <span className="account-select">{error?.message ?? "No accounts"}</span>
+                    <button className="btn btn-primary btn-sm" onClick={() => signIn()}>
+                        {status === "error" ? "Retry sign-in" : "Sign in"}
+                    </button>
                 )}
             </header>
+
+            {status === "error" && error && <div className="status">{error}</div>}
 
             {view.page !== "list" && (
                 <button className="back-btn" onClick={() => setView({ page: "list" })}>
@@ -110,19 +105,26 @@ function SurveyList({ onFill, onResults }: {
         let cancelled = false;
         (async () => {
             try {
+                const sv = getContract();
+                if (!sv) return;
                 console.log("[SurveyList] Querying contract for survey count...");
-                const count = await getSurveyCount();
-                if (cancelled) return;
+                const countRes = await sv.getSurveyCount.query();
+                if (!countRes.success || cancelled) return;
+                const count = Number(countRes.value);
                 console.log("[SurveyList] Total surveys on-chain:", count);
 
                 const items: SurveyListItem[] = [];
                 for (let i = count - 1; i >= 0; i--) {
                     if (cancelled) return;
-                    const [cid, creator, responseCount] = await Promise.all([
-                        getSurveyCid(i).catch(() => ""),
-                        getSurveyCreator(i).catch(() => ""),
-                        getResponseCount(i).catch(() => 0),
+                    const [cidRes, creatorRes, respRes] = await Promise.all([
+                        sv.getSurveyCid.query(BigInt(i)),
+                        sv.getSurveyCreator.query(BigInt(i)),
+                        sv.getResponseCount.query(BigInt(i)),
                     ]);
+
+                    const cid = cidRes.success ? cidRes.value : "";
+                    const creator = creatorRes.success ? String(creatorRes.value) : "";
+                    const responseCount = respRes.success ? Number(respRes.value) : 0;
 
                     const item: SurveyListItem = { id: i, cid, creator, responseCount };
 
@@ -192,7 +194,7 @@ function SurveyList({ onFill, onResults }: {
 
 function FillSurvey({ surveyId, account, onDone }: {
     surveyId: number;
-    account: SurveyAccount;
+    account: AppAccount;
     onDone: () => void;
 }) {
     const [survey, setSurvey] = useState<SurveyData | null>(null);
@@ -206,15 +208,17 @@ function FillSurvey({ surveyId, account, onDone }: {
         let cancelled = false;
         (async () => {
             try {
-                if (account.h160Address) {
-                    const responded = await hasResponded(surveyId, account.h160Address);
-                    if (!cancelled && responded) setAlreadyResponded(true);
+                const sv = getContract();
+                if (!sv) return;
+                const hasRes = await sv.hasResponded.query(BigInt(surveyId), account.h160Address);
+                if (!cancelled && hasRes.success && hasRes.value) {
+                    setAlreadyResponded(true);
                 }
 
-                const cid = await getSurveyCid(surveyId);
-                if (!cid || cancelled) return;
+                const cidRes = await sv.getSurveyCid.query(BigInt(surveyId));
+                if (!cidRes.success || !cidRes.value || cancelled) return;
 
-                const data = await fetchJsonFromBulletin<SurveyData>(cid);
+                const data = await fetchJsonFromBulletin<SurveyData>(cidRes.value);
                 if (cancelled) return;
                 setSurvey(data);
                 setAnswers(new Array(data.questions.length).fill(-1));
@@ -250,11 +254,18 @@ function FillSurvey({ surveyId, account, onDone }: {
 
             setStatusMsg("Uploading response to Bulletin...");
             const bytes = new TextEncoder().encode(JSON.stringify(responseData));
-            const { cid } = await uploadToBulletin(bytes);
+            const cid = await uploadToBulletin(bytes);
             console.log("[FillSurvey] Bulletin upload complete. CID:", cid);
 
+            setStatusMsg("Ensuring account is mapped...");
+            await ensureMapping(account);
+
             setStatusMsg("Submitting response on-chain (approve on your phone)...");
-            await submitResponse(surveyId, cid, account.address, account.getSigner());
+            await withTimeout(
+                getContract().submitResponse.tx(BigInt(surveyId), cid),
+                120_000,
+                "submitResponse.tx",
+            );
             console.log("[FillSurvey] Response submitted!");
 
             onDone();
@@ -323,31 +334,29 @@ function SurveyResults({ surveyId }: { surveyId: number }) {
         let cancelled = false;
         (async () => {
             try {
-                const cid = await getSurveyCid(surveyId);
-                if (!cid || cancelled) return;
+                const sv = getContract();
+                if (!sv) return;
+                const cidRes = await sv.getSurveyCid.query(BigInt(surveyId));
+                if (!cidRes.success || !cidRes.value || cancelled) return;
 
-                const data = await fetchJsonFromBulletin<SurveyData>(cid);
+                const data = await fetchJsonFromBulletin<SurveyData>(cidRes.value);
                 if (cancelled) return;
                 setSurvey(data);
 
-                const count = await getResponseCount(surveyId);
-                if (cancelled) return;
+                const countRes = await sv.getResponseCount.query(BigInt(surveyId));
+                if (!countRes.success || cancelled) return;
+                const count = Number(countRes.value);
                 setTotalResponses(count);
 
                 const t: number[][] = data.questions.map(q => new Array(q.options.length).fill(0));
 
                 for (let i = 0; i < count; i++) {
                     if (cancelled) return;
-                    let rCid: string;
-                    try {
-                        rCid = await getResponseCid(surveyId, i);
-                    } catch {
-                        continue;
-                    }
-                    if (!rCid) continue;
+                    const rCidRes = await sv.getResponseCid.query(BigInt(surveyId), BigInt(i));
+                    if (!rCidRes.success || !rCidRes.value) continue;
 
                     try {
-                        const rData = await fetchJsonFromBulletin<ResponseData>(rCid);
+                        const rData = await fetchJsonFromBulletin<ResponseData>(rCidRes.value);
                         rData.answers.forEach((optIdx, qIdx) => {
                             if (qIdx < t.length && optIdx >= 0 && optIdx < t[qIdx].length) {
                                 t[qIdx][optIdx]++;
@@ -412,7 +421,7 @@ interface QuestionDraft {
 }
 
 function CreateSurvey({ account, onCreated }: {
-    account: SurveyAccount;
+    account: AppAccount;
     onCreated: () => void;
 }) {
     const [open, setOpen] = useState(false);
@@ -496,12 +505,19 @@ function CreateSurvey({ account, onCreated }: {
 
             setStatusMsg("Uploading survey to Bulletin...");
             const bytes = new TextEncoder().encode(JSON.stringify(surveyData));
-            const { cid } = await uploadToBulletin(bytes);
+            const cid = await uploadToBulletin(bytes);
             console.log("[CreateSurvey] Bulletin upload complete. CID:", cid);
 
+            setStatusMsg("Ensuring account is mapped...");
+            await ensureMapping(account);
+
             setStatusMsg("Creating survey on-chain (approve on your phone)...");
-            const id = await createSurvey(cid, account.address, account.getSigner());
-            console.log("[CreateSurvey] Survey created! id:", id);
+            await withTimeout(
+                getContract().createSurvey.tx(cid),
+                120_000,
+                "createSurvey.tx",
+            );
+            console.log("[CreateSurvey] Survey created!");
 
             reset();
             setOpen(false);
