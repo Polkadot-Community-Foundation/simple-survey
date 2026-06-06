@@ -23,6 +23,9 @@ npm install
 npm run dev
 ```
 
+> Deploying **your own copy** (own contract, own `.dot` name, published to the
+> playground)? Follow the step-by-step [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ### Deploy contract (first time only)
 
 ```bash
