@@ -1,5 +1,8 @@
 # Survey DApp
 
+> [!WARNING]
+> The following is a prototype, reference implementation, and proof-of-concept. This open source code is provided for research, experimentation, and developer education only. This code has not been audited, is actively experimental, and may contain bugs, vulnerabilities, or incomplete features. Use at your own risk.
+
 Decentralized survey application on Polkadot. Create surveys, collect responses, and view results — all on-chain.
 
 ## How it works
@@ -8,13 +11,6 @@ Decentralized survey application on Polkadot. Create surveys, collect responses,
 - A **smart contract** on Asset Hub indexes survey CIDs and links response CIDs to them.
 - **Responses** are also stored on Bulletin, with their CIDs recorded in the contract.
 - To view results, the app reads all response CIDs from the contract, fetches the data from Bulletin, and aggregates the answers.
-
-## Stack
-
-- **Smart contract** — PVM (PolkaVM) on Paseo Asset Hub, managed via [CDM](https://github.com/paritytech/contract-dependency-manager)
-- **Bulletin Chain** — decentralized data storage via [@polkadot-apps/bulletin](https://github.com/nicosama-tech/polkadot-apps)
-- **Account management** — [@polkadot-apps/signer](https://github.com/nicosama-tech/polkadot-apps) (Host API, browser extensions, dev accounts)
-- **Frontend** — React + Vite
 
 ## Setup
 
@@ -26,17 +22,14 @@ npm run dev
 > Deploying **your own copy** (own contract, own `.dot` name, published to the
 > playground)? Follow the step-by-step [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-### Deploy contract (first time only)
 
-```bash
-cdm build
-cdm deploy -n paseo
-cdm install @example/surveys -n paseo
-```
 
-### Build & deploy frontend
 
-```bash
-npm run build:frontend
-bulletin-deploy ./dist <your-domain>.dot
-```
+
+## Security
+
+See [SECURITY.md](./SECURITY.md) for how to report bugs or vulnerabilities.
+
+## License
+
+Licensed under the [GNU General Public License v3.0](./LICENSE) (GPL-3.0-only).

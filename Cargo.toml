@@ -6,6 +6,7 @@ members = ["contracts/*"]
 version = "0.1.0"
 authors = ["Survey DApp"]
 homepage = "https://polkadot.com/"
+license = "GPL-3.0-only"
 edition = "2024"
 
 [workspace.dependencies]
