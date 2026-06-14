@@ -65,7 +65,7 @@ function getProductIdentifier(): string | null {
 }
 
 export function getAppAccountId(): [string, number] {
-    const identifier = getProductIdentifier() ?? "simple-survey.dot";
+    const identifier = getProductIdentifier() ?? "survey.dot";
     return [identifier, 0];
 }
 

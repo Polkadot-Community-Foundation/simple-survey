@@ -12,11 +12,11 @@
 #      Summit AH + a live Bulletin storage authorization). The same account signs
 #      the cdm deploy (AH instantiate + Bulletin metadata publish) and the
 #      frontend upload.
-#   2. surveys.dot is a 7-char label → ProofOfPersonhoodFull class. The publisher
+#   2. survey.dot is a 6-char label → ProofOfPersonhoodFull class. The publisher
 #      reads NoStatus on the DotNS precompile, so it CANNOT self-register it. The
 #      name must already be reserved to the publisher via the DotNS
 #      `registerReserved` owner-override (owner key, in the dotns repo) BEFORE the
-#      frontend leg runs — otherwise bulletin-deploy fails to bind surveys.dot.
+#      frontend leg runs — otherwise bulletin-deploy fails to bind survey.dot.
 #   3. The cdm CLI installed below must carry the `w3s` preset. The public
 #      install.sh builds from contract-dependency-manager main, which has it; the
 #      `cdm account set -n w3s` step fails fast with "Unknown chain" if not.
@@ -121,7 +121,7 @@ jobs:
         run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.10.1
 
       # Builds with the (now live) cdm.json address baked in, then uploads to
-      # Summit Bulletin and binds surveys.dot. --env summit; direct signer = 5Fk8.
+      # Summit Bulletin and binds survey.dot. --env summit; direct signer = 5Fk8.
       - name: Deploy frontend leg
         if: contains(github.event.inputs.legs, 'frontend')
         run: npm run deploy:frontend

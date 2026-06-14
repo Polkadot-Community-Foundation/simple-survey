@@ -4,9 +4,9 @@
 > **This is the public "deploy your own copy" tutorial** — it targets the
 > Paseo testnet / playground using public faucets, and is the right path for
 > learning. The repository's **committed configuration targets the production
-> Summit network** (`@polkadot/surveys`, `surveys.dot`, Summit RPC/gateway in
+> Summit network** (`@polkadot/surveys`, `survey.dot`, Summit RPC/gateway in
 > `src/utils.ts` and `cdm.json`). The production deploy is an **operator-only**
-> path (gated, Bulletin-authorized account; the `surveys.dot` short name needs
+> path (gated, Bulletin-authorized account; the `survey.dot` short name needs
 > a DotNS owner-override) run via `npm run deploy:contract` + `npm run
 > deploy:frontend` or the `Deploy to Summit` workflow — not these faucet steps.
 > See the operator runbook in the deployment KB.
