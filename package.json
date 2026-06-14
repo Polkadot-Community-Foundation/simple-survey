@@ -10,7 +10,7 @@
     "build:contracts": "cdm build",
     "deploy:contract": "cdm deploy -n w3s && npm run install:contracts",
     "install:contracts": "cdm install -n w3s @polkadot/surveys",
-    "deploy:frontend": "npm run build:frontend && bulletin-deploy --env summit ./dist survey.dot",
+    "deploy:frontend": "npm run build:frontend && bulletin-deploy --env summit --mnemonic \"$MNEMONIC\" --config ./polkadot-app-deploy.config.ts ./dist survey.dot",
     "preview": "vite preview"
   },
   "dependencies": {
