@@ -9,7 +9,7 @@ import {
 } from "@novasamatech/host-api-wrapper";
 import { RequestCredentialsErr } from "@novasamatech/host-api";
 import { ContractManager, ensureContractAccountMapped } from "@parity/product-sdk-contracts";
-import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
+import { summit_asset_hub } from "@parity/product-sdk-descriptors/summit-asset-hub";
 import { ss58ToH160 } from "@parity/product-sdk-address";
 import { createClient, AccountId, type PolkadotSigner } from "polkadot-api";
 import { getWsProvider } from "@polkadot-api/ws-provider";
@@ -18,11 +18,12 @@ import { CID } from "multiformats/cid";
 import * as raw from "multiformats/codecs/raw";
 import type { MultihashDigest } from "multiformats/hashes/interface";
 
-const CONTRACT_KEY = "@example/surveys";
+const CONTRACT_KEY = "@polkadot/surveys";
 
-// Paseo Next v2 — see @parity/product-sdk 0.4.0 CHANGELOG. v1 retired 2026-05-20.
-const PASEO_ASSET_HUB_GENESIS = "0x173cea9df45656cf612c8b8ece56e04e9a693c69cfaac47d3628dae735067af8" as const;
-const PASEO_ASSET_HUB_WS = "wss://paseo-asset-hub-next-rpc.polkadot.io";
+// Summit Asset Hub (W3S) — the CDM registry and this contract live here.
+// Genesis + RPC per guides/CDM_DEPLOYMENT_GUIDE.md; descriptor = summit_asset_hub.
+const SUMMIT_ASSET_HUB_GENESIS = "0xf388dc6d6cdf6fb77eac3c4a91f31bc0c8642b142f1a757512ab7849f9f70660" as const;
+const SUMMIT_ASSET_HUB_WS = "wss://summit-asset-hub-rpc.polkadot.io";
 
 // ---------------------------------------------------------------------------
 // Permissions (RFC-0002)
@@ -64,7 +65,7 @@ function getProductIdentifier(): string | null {
 }
 
 export function getAppAccountId(): [string, number] {
-    const identifier = getProductIdentifier() ?? "simple-survey.dot";
+    const identifier = getProductIdentifier() ?? "survey.dot";
     return [identifier, 0];
 }
 
@@ -129,7 +130,7 @@ export async function connectAccount(): Promise<void> {
         const { publicKey } = result.value;
         const productAccount: ProductAccount = { dotNsIdentifier: identifier, derivationIndex, publicKey };
         // "createTransaction" signerType routes through the host's
-        // `host_create_transaction` RPC, the only path that signs Paseo Next v2's
+        // `host_create_transaction` RPC, the only path that signs Summit Asset Hub's
         // pallet-revive signed extensions (AsPgas, AsRingAlias, …).
         const signer = accountsProvider.getProductAccountSigner(productAccount, "createTransaction");
         const ss58 = accountIdCodec.dec(publicKey);
@@ -308,8 +309,8 @@ async function ensureContractsReady(): Promise<void> {
             typeof window !== "undefined" && /^localhost(:\d+)?$/.test(window.location.host);
 
         const provider = isDevHost
-            ? getWsProvider(PASEO_ASSET_HUB_WS)
-            : createPapiProvider(PASEO_ASSET_HUB_GENESIS, getWsProvider(PASEO_ASSET_HUB_WS));
+            ? getWsProvider(SUMMIT_ASSET_HUB_WS)
+            : createPapiProvider(SUMMIT_ASSET_HUB_GENESIS, getWsProvider(SUMMIT_ASSET_HUB_WS));
         console.log(`[CDM] Asset Hub provider: ${isDevHost ? "direct WS (dev)" : "host with WS fallback (prod)"}`);
         _polkadotClient = createClient(provider);
 
@@ -321,7 +322,7 @@ async function ensureContractsReady(): Promise<void> {
         _contractManager = ContractManager.fromClient(
             _cdmJson,
             _polkadotClient,
-            paseo_asset_hub,
+            summit_asset_hub,
             _state.account
                 ? { defaultOrigin: _state.account.address as never, defaultSigner: _state.account.signer }
                 : undefined,
@@ -358,7 +359,7 @@ export function getContract(): any {
 }
 
 // ---------------------------------------------------------------------------
-// Account mapping (Revive). pallet-revive on Paseo Next v2 requires every SS58
+// Account mapping (Revive). pallet-revive on Summit Asset Hub requires every SS58
 // origin that calls a contract to have an explicit Revive.map_account() entry.
 // Idempotent — first call costs one signature, subsequent calls short-circuit.
 // ---------------------------------------------------------------------------
@@ -395,7 +396,7 @@ export async function ensureMapping(account: AppAccount): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const GATEWAYS = [
-    "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
+    "https://summit-ipfs.polkadot.io/ipfs/",
     "https://dweb.link/ipfs/",
     "https://ipfs.io/ipfs/",
     "https://nftstorage.link/ipfs/",

@@ -1,11 +1,11 @@
 {
   "dependencies": {
-    "@example/surveys": "latest"
+    "@polkadot/surveys": "latest"
   },
   "contracts": {
-    "@example/surveys": {
+    "@polkadot/surveys": {
       "version": 0,
-      "address": "0x3DA8017c2FE4767b343774FD210A60465A7cFe80",
+      "address": "0xD9FBCF04Ea06904Ded8703d07b0c7E34F681E89F",
       "abi": [
         {
           "inputs": [],
@@ -211,8 +211,8 @@
           "type": "error"
         }
       ],
-      "metadataCid": "bafk2bzacedxv27bk22zfjo5oeyyklzusrztrmjvkchddkerjgofbh2v54svv2"
+      "metadataCid": "bafk2bzacebyeelbcniq2faq4zw2x33dcjhoqyt5crj2diftm52ncxqqx4dyzm"
     }
   },
-  "registry": "0xf62c2ece29cd8df2e10040ecfa5a894a5c5d9cb0"
+  "registry": "0xa5747e60ae27f93e92019e4021abfc4957050141"
 }

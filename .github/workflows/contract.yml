@@ -1,0 +1,52 @@
+# Contract build gate — compiles the Rust PVM contract with the CDM toolchain.
+# Scoped to contract changes (the toolchain install is heavy). No chain access.
+name: Contract build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - "Cargo.toml"
+      - "cdm.json"
+      - ".github/workflows/contract.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "Cargo.toml"
+      - "cdm.json"
+      - ".github/workflows/contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-src is REQUIRED: the PolkaVM target compiles the std library from
+      # source (without it: "rustlib/src/rust/library/Cargo.lock does not exist").
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The CDM build plugin lives on a feature branch (not the default branch).
+      - name: Install cargo-pvm-contract
+        run: |
+          cargo install --force --locked \
+            --git https://github.com/paritytech/cargo-pvm-contract.git \
+            --branch charles/cdm-integration \
+            cargo-pvm-contract
+
+      - name: Install CDM CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash
+          echo "$HOME/.cdm/bin" >> "$GITHUB_PATH"
+
+      - run: cdm --version
+      - run: cdm build
+      - run: ls -la target/release/*.polkavm

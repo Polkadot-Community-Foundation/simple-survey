@@ -1,0 +1,12 @@
+[build]
+target = ".cargo/riscv64emac-unknown-none-polkavm.json"
+
+[unstable]
+build-std = ["core", "alloc", "test"]
+json-target-spec = true
+
+[net]
+git-fetch-with-cli = true
+
+[env]
+RUSTC_BOOTSTRAP = "1"

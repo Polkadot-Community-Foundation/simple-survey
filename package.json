@@ -8,8 +8,9 @@
     "dev": "vite --host",
     "build:frontend": "tsc -b && vite build",
     "build:contracts": "cdm build",
-    "deploy": "cdm deploy -n paseo --registry-address 0xf62c2ece29cd8df2e10040ecfa5a894a5c5d9cb0 --assethub-url wss://paseo-asset-hub-next-rpc.polkadot.io --bulletin-url wss://paseo-bulletin-next-rpc.polkadot.io && npm run install:contracts",
-    "install:contracts": "cdm install -n paseo --registry-address 0xf62c2ece29cd8df2e10040ecfa5a894a5c5d9cb0 --assethub-url wss://paseo-asset-hub-next-rpc.polkadot.io --ipfs-gateway-url https://paseo-bulletin-next-ipfs.polkadot.io/ipfs",
+    "deploy:contract": "cdm deploy -n w3s && npm run install:contracts",
+    "install:contracts": "cdm install -n w3s @polkadot/surveys",
+    "deploy:frontend": "npm run build:frontend && polkadot-app-deploy --env summit --mnemonic \"$MNEMONIC\" --config ./polkadot-app-deploy.config.ts ./dist survey.dot",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,7 +20,7 @@
     "@parity/product-sdk": "^0.9.0",
     "@parity/product-sdk-address": "^0.1.1",
     "@parity/product-sdk-contracts": "^0.7.0",
-    "@parity/product-sdk-descriptors": "^0.5.2",
+    "@parity/product-sdk-descriptors": "^0.6.1",
     "@parity/product-sdk-tx": "^0.2.7",
     "@polkadot-api/ws-provider": "^0.9.0",
     "multiformats": "^13.4.2",

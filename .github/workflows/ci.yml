@@ -1,0 +1,46 @@
+# Frontend validation gate — typecheck + production build.
+# No secrets, no chain access. Proves the Summit-targeted bundle compiles.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: the CDM/Summit build chain requires >= 22 (Node 20 can silently
+      # produce a broken bundle — see guides/CDM_DEPLOYMENT_GUIDE.md).
+      # No `cache: npm` — this repo gitignores package-lock.json, and setup-node's
+      # npm cache requires a committed lockfile.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+
+      # tsc -b && vite build. Fails if the summit_asset_hub descriptor import,
+      # types, or any source regress.
+      - run: npm run build:frontend
+
+      # Guard against a Paseo regression sneaking back into the shipped bundle:
+      # the built assets must embed the Summit RPC/gateway and must NOT contain
+      # any "paseo" reference. (Lesson: a UI keeps its own network config —
+      # verify the built artifact, not just the source.)
+      - name: Assert bundle targets Summit, not Paseo
+        run: |
+          if grep -rqiE "paseo" dist/assets/*.js; then
+            echo "::error::Paseo reference found in built bundle — frontend is not fully retargeted to Summit"
+            grep -roiE "paseo[a-z0-9.-]*" dist/assets/*.js | sort -u
+            exit 1
+          fi
+          grep -rq "summit-asset-hub-rpc.polkadot.io" dist/assets/*.js \
+            || { echo "::error::Summit Asset Hub RPC not found in bundle"; exit 1; }
+          echo "ok — bundle targets Summit"

@@ -1,0 +1,138 @@
+# Deploy to Summit (manual, guarded).
+#
+# Canonical path is the operator VM (see the operator runbook in the deployment
+# KB) — every other PCF Summit product deploys from the GCP VM. This workflow is
+# the convenience automation; using it puts the production deployer mnemonic in
+# GitHub Actions, so it is workflow_dispatch-only and requires an explicit
+# confirmation input.
+#
+# PRECONDITIONS (this workflow does NOT do them):
+#   1. secrets.SUMMIT_DEPLOYER_MNEMONIC must hdkd-derive to the Bulletin-authorized
+#      W3S publisher 5Fk8FBTqBpAyBReZPse2wn8Lf4ADzdNVAsrGoNMSTxKedN8f (funded on
+#      Summit AH + a live Bulletin storage authorization). The same account signs
+#      the cdm deploy (AH instantiate + Bulletin metadata publish) and the
+#      frontend upload.
+#   2. survey.dot is a 6-char label → ProofOfPersonhoodFull class. The publisher
+#      reads NoStatus on the DotNS precompile, so it CANNOT self-register it. The
+#      name must already be reserved to the publisher via the DotNS
+#      `registerReserved` owner-override (owner key, in the dotns repo) BEFORE the
+#      frontend leg runs — otherwise polkadot-app-deploy fails to bind survey.dot.
+#   3. The cdm CLI installed below must carry the `w3s` preset. The public
+#      install.sh builds from contract-dependency-manager main, which has it; the
+#      `cdm account set -n w3s` step fails fast with "Unknown chain" if not.
+name: Deploy to Summit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm a production Summit deploy'
+        required: true
+        default: ""
+      legs:
+        description: "Which legs to deploy"
+        required: true
+        default: "contract+frontend"
+        type: choice
+        options:
+          - contract+frontend
+          - contract
+          - frontend
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-summit
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: summit
+    env:
+      # polkadot-app-deploy and cdm both read MNEMONIC for the direct signer.
+      # NOTE: the binary is `polkadot-app-deploy` (PCF pkg) — NOT the legacy
+      # `bulletin-deploy`, which lacks the manifest direct-signer fix.
+      MNEMONIC: ${{ secrets.SUMMIT_DEPLOYER_MNEMONIC }}
+    steps:
+      - name: Validate confirmation
+        run: |
+          [ "${{ github.event.inputs.confirm }}" = "deploy" ] \
+            || { echo "::error::confirm input must be exactly 'deploy'"; exit 1; }
+          [ -n "$MNEMONIC" ] \
+            || { echo "::error::secrets.SUMMIT_DEPLOYER_MNEMONIC is not set"; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      # No `cache: npm` — this repo gitignores package-lock.json (setup-node's
+      # npm cache requires a committed lockfile).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+
+      # ---- Contract toolchain (only needed for the contract leg) ----
+      - if: contains(github.event.inputs.legs, 'contract')
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
+      - if: contains(github.event.inputs.legs, 'contract')
+        uses: Swatinem/rust-cache@v2
+      - name: Install cargo-pvm-contract
+        if: contains(github.event.inputs.legs, 'contract')
+        run: |
+          cargo install --force --locked \
+            --git https://github.com/paritytech/cargo-pvm-contract.git \
+            --branch charles/cdm-integration \
+            cargo-pvm-contract
+
+      - name: Install CDM CLI
+        if: contains(github.event.inputs.legs, 'contract')
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash
+          echo "$HOME/.cdm/bin" >> "$GITHUB_PATH"
+
+      - name: Configure CDM account (w3s)
+        if: contains(github.event.inputs.legs, 'contract')
+        run: |
+          cdm account set -n w3s --mnemonic "$MNEMONIC"
+          cdm account map -n w3s || true   # one-time Revive map; harmless if already mapped
+          cdm account bal -n w3s
+
+      # cdm deploy (AH instantiate + Bulletin metadata publish + registry register)
+      # then cdm install -n w3s rewrites cdm.json with the live Summit address.
+      - name: Deploy contract leg
+        if: contains(github.event.inputs.legs, 'contract')
+        run: npm run deploy:contract
+
+      - name: Assert cdm.json got a live address
+        if: contains(github.event.inputs.legs, 'contract')
+        run: |
+          ADDR=$(node -e "process.stdout.write(require('./cdm.json').contracts['@polkadot/surveys'].address)")
+          echo "registered address: $ADDR"
+          case "$ADDR" in
+            0x0000000000000000000000000000000000000000|"") \
+              echo "::error::cdm.json address still zero — contract deploy/install did not update it"; exit 1;;
+          esac
+
+      # ---- Frontend leg ----
+      - name: Install deploy tool
+        if: contains(github.event.inputs.legs, 'frontend')
+        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.10.1
+
+      # Builds with the (now live) cdm.json address baked in, then uploads to
+      # Summit Bulletin and binds survey.dot. --env summit; direct signer = 5Fk8.
+      - name: Deploy frontend leg
+        if: contains(github.event.inputs.legs, 'frontend')
+        run: npm run deploy:frontend
+
+      # cdm.json now holds the live Summit address — surface it so the operator
+      # can commit it back to main (CI does not push to protected branches).
+      - name: Upload updated manifest
+        if: always() && contains(github.event.inputs.legs, 'contract')
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdm-json-summit
+          path: cdm.json
