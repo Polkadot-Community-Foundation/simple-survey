@@ -18,13 +18,12 @@ jobs:
 
       # Node 22: the CDM/Summit build chain requires >= 22 (Node 20 can silently
       # produce a broken bundle — see guides/CDM_DEPLOYMENT_GUIDE.md).
-      # No `cache: npm` — this repo gitignores package-lock.json, and setup-node's
-      # npm cache requires a committed lockfile.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
-      - run: npm install
+      - run: npm ci
 
       # tsc -b && vite build. Fails if the summit_asset_hub descriptor import,
       # types, or any source regress.

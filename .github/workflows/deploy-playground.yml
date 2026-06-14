@@ -1,0 +1,111 @@
+# List survey.dot on the Playground Apps grid (and re-host the SPA via playground-cli).
+#
+# This is the playground-sample deploy path (cf. DEPLOYMENT.md): the CONTRACT is
+# deployed separately by CDM (`cdm deploy -n w3s`, see deploy-summit.yml); this
+# workflow does the FRONTEND + GRID legs via the Summit-capable playground CLI:
+#   1. build the Vite SPA → dist/
+#   2. upload to Summit Bulletin + bind DotNS name survey.dot
+#   3. publish it (moddable) into @polkadot/playground-registry so it shows in the
+#      playground Apps grid (`playground mod survey.dot`).
+#
+# ⚠️ playground-cli has no publish-only / no-host mode — this RE-HOSTS the content,
+# so survey.dot gets a NEW root CID and is re-bound by playground-cli (superseding
+# the polkadot-app-deploy contenthash). Update the register CID after a run.
+#
+# Signer: secrets.SUMMIT_DEPLOYER_MNEMONIC = 5Fk8 — Bulletin-authorized, owns
+# survey.dot, and is the playground-registry sudo (so it may publish).
+name: List on Playground (survey.dot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to the playground grid (moddable). Off = host + bind name only."
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # One signer (5Fk8) signs serially — share the group with the CDM/app deploy.
+  group: deploy-summit
+  cancel-in-progress: false
+
+env:
+  DOMAIN: survey
+  PLAYGROUND_TAG: social # one of playground-cli's PLAYGROUND_TAGS (matches dot.json)
+  # PCF fork, pinned to the env-aware-publish fix (playground-cli #2). Earlier
+  # commits publish the --playground registry entry to PASEO instead of Summit.
+  PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
+  PLAYGROUND_CLI_REF: 9bc441548c6915fe612d031b83684797f3e6c2a0
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MNEMONIC: ${{ secrets.SUMMIT_DEPLOYER_MNEMONIC }}
+    steps:
+      - name: Guard — MNEMONIC must be set
+        run: |
+          [ -n "$MNEMONIC" ] \
+            || { echo "::error::secrets.SUMMIT_DEPLOYER_MNEMONIC (the 5Fk8 deployer mnemonic) is not set"; exit 1; }
+
+      # origin = this repo → --moddable records it as the public source.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # ── App leg: reproducible build from the committed lockfile ──────────────
+      - run: npm ci
+      - run: npm run build:frontend
+      - run: test -f dist/index.html || { echo "::error::dist/index.html missing after build"; exit 1; }
+
+      # ── Tooling leg: build the Summit-capable playground CLI from the fork ────
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.5.2"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Checkout playground-cli (PCF fork, pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PLAYGROUND_CLI_REPO }}
+          ref: ${{ env.PLAYGROUND_CLI_REF }}
+          path: .playground-cli
+      - name: Build playground CLI binary
+        working-directory: .playground-cli
+        run: |
+          # --no-frozen-lockfile: the pinned fork commit ships a stale pnpm-lock
+          # (package.json repointed to cdm-env@^2.1.0 without regenerating). We
+          # only need the binary; cdm-env@2.1.0 is public on npm.
+          pnpm install --no-frozen-lockfile
+          bun build --compile src/index.ts --outfile "$RUNNER_TEMP/playground"
+          "$RUNNER_TEMP/playground" --version
+      - name: Sanity — Summit CDM registry resolves (w3s populated)
+        working-directory: .playground-cli
+        run: |
+          node --input-type=module -e "import {getRegistryAddress} from '@polkadot-community-foundation/cdm-env'; const a=getRegistryAddress('w3s'); if(!a){console.error('::error::cdm-env w3s registry address is empty — Summit publish would fail'); process.exit(1)} console.log('w3s CDM registry =', a)"
+
+      # ── Deploy: host + bind name + (optional) grid publish ───────────────────
+      - name: Deploy + list on playground
+        env:
+          PUBLISH: ${{ inputs.publish == false && 'no' || 'yes' }}
+        run: |
+          set -euo pipefail
+          PUBLISH_FLAGS="--playground --moddable --tag $PLAYGROUND_TAG"
+          if [ "$PUBLISH" = "no" ]; then
+            PUBLISH_FLAGS="--no-playground" # isFullySpecified still needs a boolean playground flag
+          fi
+          "$RUNNER_TEMP/playground" deploy \
+            --env summit \
+            --signer dev --suri "$MNEMONIC" \
+            --domain "$DOMAIN" \
+            --buildDir dist --no-build \
+            --no-contracts \
+            $PUBLISH_FLAGS

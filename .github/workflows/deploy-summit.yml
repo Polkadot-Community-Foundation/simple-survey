@@ -65,13 +65,12 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      # No `cache: npm` — this repo gitignores package-lock.json (setup-node's
-      # npm cache requires a committed lockfile).
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
-      - run: npm install
+      - run: npm ci
 
       # ---- Contract toolchain (only needed for the contract leg) ----
       - if: contains(github.event.inputs.legs, 'contract')
