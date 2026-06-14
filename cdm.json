@@ -5,7 +5,7 @@
   "contracts": {
     "@polkadot/surveys": {
       "version": 0,
-      "address": "0x0000000000000000000000000000000000000000",
+      "address": "0xD9FBCF04Ea06904Ded8703d07b0c7E34F681E89F",
       "abi": [
         {
           "inputs": [],
@@ -211,7 +211,7 @@
           "type": "error"
         }
       ],
-      "metadataCid": ""
+      "metadataCid": "bafk2bzacebyeelbcniq2faq4zw2x33dcjhoqyt5crj2diftm52ncxqqx4dyzm"
     }
   },
   "registry": "0xa5747e60ae27f93e92019e4021abfc4957050141"
