@@ -29,9 +29,6 @@ Cargo.lock
 .papi/metadata/
 .papi/descriptors/dist/
 
-# Lock files
-package-lock.json
-
 # OS
 .DS_Store
 Thumbs.db
