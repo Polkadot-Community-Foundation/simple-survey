@@ -16,7 +16,7 @@
 #      reads NoStatus on the DotNS precompile, so it CANNOT self-register it. The
 #      name must already be reserved to the publisher via the DotNS
 #      `registerReserved` owner-override (owner key, in the dotns repo) BEFORE the
-#      frontend leg runs — otherwise bulletin-deploy fails to bind survey.dot.
+#      frontend leg runs — otherwise polkadot-app-deploy fails to bind survey.dot.
 #   3. The cdm CLI installed below must carry the `w3s` preset. The public
 #      install.sh builds from contract-dependency-manager main, which has it; the
 #      `cdm account set -n w3s` step fails fast with "Unknown chain" if not.
@@ -51,7 +51,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: summit
     env:
-      # bulletin-deploy and cdm both read MNEMONIC for the direct signer.
+      # polkadot-app-deploy and cdm both read MNEMONIC for the direct signer.
+      # NOTE: the binary is `polkadot-app-deploy` (PCF pkg) — NOT the legacy
+      # `bulletin-deploy`, which lacks the manifest direct-signer fix.
       MNEMONIC: ${{ secrets.SUMMIT_DEPLOYER_MNEMONIC }}
     steps:
       - name: Validate confirmation
