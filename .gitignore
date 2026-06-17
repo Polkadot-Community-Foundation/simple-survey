@@ -41,3 +41,6 @@ Thumbs.db
 
 # TS incremental build cache
 tsconfig.tsbuildinfo
+
+# Product SDK skills — fetched by ./setup.sh, not committed (kept fresh, never stale)
+.claude/skills/
