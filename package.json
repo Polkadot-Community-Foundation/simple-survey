@@ -14,25 +14,25 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
-    "@novasamatech/host-api": "^0.8.4",
-    "@novasamatech/host-api-wrapper": "^0.8.4",
-    "@parity/product-sdk": "^0.9.0",
+    "@novasamatech/host-api": "^0.8.10",
+    "@novasamatech/host-api-wrapper": "^0.8.10",
+    "@parity/product-sdk": "^0.15.1",
     "@parity/product-sdk-address": "^0.1.1",
-    "@parity/product-sdk-contracts": "^0.7.0",
-    "@parity/product-sdk-descriptors": "^0.5.2",
-    "@parity/product-sdk-tx": "^0.2.7",
+    "@parity/product-sdk-contracts": "^0.8.1",
+    "@parity/product-sdk-descriptors": "^0.6.2",
+    "@parity/product-sdk-tx": "^0.2.15",
     "@polkadot-api/ws-provider": "^0.9.0",
     "multiformats": "^13.4.2",
-    "polkadot-api": "^2.1.3",
+    "polkadot-api": "^2.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "typescript": "^5.9.0",
-    "vite": "^7.0.0"
+    "vite": "^8.0.16"
   },
   "overrides": {
     "@polkadot-api/json-rpc-provider": "0.2.0"
