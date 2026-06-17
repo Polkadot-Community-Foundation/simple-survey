@@ -8,32 +8,31 @@
     "dev": "vite --host",
     "build:frontend": "tsc -b && vite build",
     "build:contracts": "cdm build",
-    "deploy:contract": "cdm deploy -n w3s && npm run install:contracts",
-    "install:contracts": "cdm install -n w3s @polkadot/surveys",
-    "deploy:frontend": "npm run build:frontend && polkadot-app-deploy --env summit --mnemonic \"$MNEMONIC\" --config ./polkadot-app-deploy.config.ts --publish ./dist survey.dot",
+    "deploy": "cdm deploy -n paseo --registry-address 0xf62c2ece29cd8df2e10040ecfa5a894a5c5d9cb0 --assethub-url wss://paseo-asset-hub-next-rpc.polkadot.io --bulletin-url wss://paseo-bulletin-next-rpc.polkadot.io && npm run install:contracts",
+    "install:contracts": "cdm install -n paseo --registry-address 0xf62c2ece29cd8df2e10040ecfa5a894a5c5d9cb0 --assethub-url wss://paseo-asset-hub-next-rpc.polkadot.io --ipfs-gateway-url https://paseo-bulletin-next-ipfs.polkadot.io/ipfs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
-    "@novasamatech/host-api": "^0.8.4",
-    "@novasamatech/host-api-wrapper": "^0.8.4",
-    "@parity/product-sdk": "^0.9.0",
+    "@novasamatech/host-api": "^0.8.10",
+    "@novasamatech/host-api-wrapper": "^0.8.10",
+    "@parity/product-sdk": "^0.15.1",
     "@parity/product-sdk-address": "^0.1.1",
-    "@parity/product-sdk-contracts": "^0.7.0",
-    "@parity/product-sdk-descriptors": "^0.6.1",
-    "@parity/product-sdk-tx": "^0.2.7",
+    "@parity/product-sdk-contracts": "^0.8.1",
+    "@parity/product-sdk-descriptors": "^0.6.2",
+    "@parity/product-sdk-tx": "^0.2.15",
     "@polkadot-api/ws-provider": "^0.9.0",
     "multiformats": "^13.4.2",
-    "polkadot-api": "^2.1.3",
+    "polkadot-api": "^2.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "typescript": "^5.9.0",
-    "vite": "^7.0.0"
+    "vite": "^8.0.16"
   },
   "overrides": {
     "@polkadot-api/json-rpc-provider": "0.2.0"
