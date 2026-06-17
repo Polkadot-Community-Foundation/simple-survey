@@ -35,10 +35,14 @@ concurrency:
 env:
   DOMAIN: survey
   PLAYGROUND_TAG: social # one of playground-cli's PLAYGROUND_TAGS (matches dot.json)
-  # PCF fork, pinned to the env-aware-publish fix (playground-cli #2). Earlier
-  # commits publish the --playground registry entry to PASEO instead of Summit.
+  # PCF fork, pinned to synced fork main (playground-cli #8): env-aware publish,
+  # native Summit descriptors, builder-identity-gate operator opt-out.
+  # NOTE: the playground Apps-grid publish (publishDev) currently reverts on-chain
+  # (registry identity-gate / v17). The primary content + browse deploy is
+  # deploy-summit.yml (polkadot-app-deploy); this grid-listing path is kept ready
+  # for when the registry publish path is restored.
   PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
-  PLAYGROUND_CLI_REF: 9bc441548c6915fe612d031b83684797f3e6c2a0
+  PLAYGROUND_CLI_REF: 5b5559b2b61140e7ad99abb643bee7303f402bcb
 
 jobs:
   deploy:
@@ -46,6 +50,8 @@ jobs:
     timeout-minutes: 25
     env:
       MNEMONIC: ${{ secrets.SUMMIT_DEPLOYER_MNEMONIC }}
+      # Operator opt-out of the synced CLI's builder-identity gate (headless 5Fk8).
+      PLAYGROUND_SKIP_IDENTITY_GATE: "1"
     steps:
       - name: Guard — MNEMONIC must be set
         run: |
