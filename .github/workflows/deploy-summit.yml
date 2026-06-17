@@ -119,10 +119,14 @@ jobs:
       # ---- Frontend leg ----
       - name: Install deploy tool
         if: contains(github.event.inputs.legs, 'frontend')
-        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.11.0
+        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.11.1
 
       # Builds with the (now live) cdm.json address baked in, then uploads to
       # Summit Bulletin and binds survey.dot. --env summit; direct signer = 5Fk8.
+      # deploy:frontend passes --publish → calls Publisher.publish(survey.dot) on
+      # Summit so the SPA lists in the browse app-directory. Requires CLI >= 0.11.1
+      # (earlier versions had no Summit Publisher address → --publish was a no-op).
+      # 5Fk8 is the Publisher owner, so this publishes with no PoP gate / rate limit.
       - name: Deploy frontend leg
         if: contains(github.event.inputs.legs, 'frontend')
         run: npm run deploy:frontend
