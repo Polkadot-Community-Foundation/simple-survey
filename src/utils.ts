@@ -9,7 +9,7 @@ import {
 } from "@novasamatech/host-api-wrapper";
 import { RequestCredentialsErr } from "@novasamatech/host-api";
 import { ContractManager, ensureContractAccountMapped } from "@parity/product-sdk-contracts";
-import { summit_asset_hub } from "@parity/product-sdk-descriptors/summit-asset-hub";
+import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import { ss58ToH160 } from "@parity/product-sdk-address";
 import { createClient, AccountId, type PolkadotSigner } from "polkadot-api";
 import { getWsProvider } from "@polkadot-api/ws-provider";
@@ -21,9 +21,9 @@ import type { MultihashDigest } from "multiformats/hashes/interface";
 const CONTRACT_KEY = "@polkadot/surveys";
 
 // Summit Asset Hub (W3S) — the CDM registry and this contract live here.
-// Genesis + RPC per guides/CDM_DEPLOYMENT_GUIDE.md; descriptor = summit_asset_hub.
+// Genesis + RPC per guides/CDM_DEPLOYMENT_GUIDE.md; descriptor = paseo_asset_hub.
 const SUMMIT_ASSET_HUB_GENESIS = "0xf388dc6d6cdf6fb77eac3c4a91f31bc0c8642b142f1a757512ab7849f9f70660" as const;
-const SUMMIT_ASSET_HUB_WS = "wss://summit-asset-hub-rpc.polkadot.io";
+const SUMMIT_ASSET_HUB_WS = "wss://paseo-asset-hub-next-rpc.polkadot.io"; // paseo-next AH (const name kept for diff-min)
 
 // ---------------------------------------------------------------------------
 // Permissions (RFC-0002)
@@ -322,7 +322,7 @@ async function ensureContractsReady(): Promise<void> {
         _contractManager = ContractManager.fromClient(
             _cdmJson,
             _polkadotClient,
-            summit_asset_hub,
+            paseo_asset_hub,
             _state.account
                 ? { defaultOrigin: _state.account.address as never, defaultSigner: _state.account.signer }
                 : undefined,
@@ -396,7 +396,7 @@ export async function ensureMapping(account: AppAccount): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const GATEWAYS = [
-    "https://summit-ipfs.polkadot.io/ipfs/",
+    "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
     "https://dweb.link/ipfs/",
     "https://ipfs.io/ipfs/",
     "https://nftstorage.link/ipfs/",
