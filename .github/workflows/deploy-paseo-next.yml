@@ -20,13 +20,13 @@
 #   3. The cdm CLI installed below must carry the `w3s` preset. The public
 #      install.sh builds from contract-dependency-manager main, which has it; the
 #      `cdm account set -n paseo-next` step fails fast with "Unknown chain" if not.
-name: Deploy to Summit
+name: Deploy to devnet
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type "deploy" to confirm a production Summit deploy'
+        description: 'Type "deploy" to confirm a production devnet deploy'
         required: true
         default: ""
       legs:

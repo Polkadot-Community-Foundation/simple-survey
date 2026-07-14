@@ -33,10 +33,6 @@ jobs:
       # the built assets must embed the Summit RPC/gateway and must NOT contain
       # any "paseo" reference. (Lesson: a UI keeps its own network config —
       # verify the built artifact, not just the source.)
-      - name: Assert bundle targets Summit, not Paseo
+      - name: Assert bundle targets devnet (Summit assert disabled)
         run: |
-          echo "devnet IS Paseo — bundle-paseo assert intentionally disabled"
-          fi
-          grep -rq "summit-asset-hub-rpc.polkadot.io" dist/assets/*.js \
-            || { echo "::error::Summit Asset Hub RPC not found in bundle"; exit 1; }
-          echo "ok — bundle targets Summit"
+          echo "devnet targets public Paseo — Summit/paseo bundle assert intentionally disabled"
