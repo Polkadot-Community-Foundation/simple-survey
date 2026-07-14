@@ -96,9 +96,9 @@ jobs:
       - name: Configure CDM account (w3s)
         if: contains(github.event.inputs.legs, 'contract')
         run: |
-          cdm account set -n paseo-next --mnemonic "$MNEMONIC"
-          cdm account map -n paseo-next || true   # one-time Revive map; harmless if already mapped
-          cdm account bal -n paseo-next
+          cdm account set -n devnet --mnemonic "$MNEMONIC"
+          cdm account map -n devnet || true   # one-time Revive map; harmless if already mapped
+          cdm account bal -n devnet
 
       # cdm deploy (AH instantiate + Bulletin metadata publish + registry register)
       # then cdm install -n paseo-next rewrites cdm.json with the live Summit address.
