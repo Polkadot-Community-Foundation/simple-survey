@@ -42,7 +42,7 @@ env:
   # deploy-summit.yml (polkadot-app-deploy); this grid-listing path is kept ready
   # for when the registry publish path is restored.
   PLAYGROUND_CLI_REPO: Polkadot-Community-Foundation/playground-cli
-  PLAYGROUND_CLI_REF: 5b5559b2b61140e7ad99abb643bee7303f402bcb
+  PLAYGROUND_CLI_REF: ce66fdb6762101b9ae5d38848add510132bd075d
 
 jobs:
   deploy:
