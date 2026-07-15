@@ -109,7 +109,7 @@ jobs:
             PUBLISH_FLAGS="--no-playground" # isFullySpecified still needs a boolean playground flag
           fi
           "$RUNNER_TEMP/playground" deploy \
-            --env summit \
+            --env devnet \
             --signer dev --suri "$MNEMONIC" \
             --domain "$DOMAIN" \
             --buildDir dist --no-build \
