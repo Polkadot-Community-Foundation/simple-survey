@@ -22,8 +22,8 @@ const CONTRACT_KEY = "@polkadot/surveys";
 
 // Summit Asset Hub (W3S) — the CDM registry and this contract live here.
 // Genesis + RPC per guides/CDM_DEPLOYMENT_GUIDE.md; descriptor = paseo_asset_hub.
-const SUMMIT_ASSET_HUB_GENESIS = "0xf388dc6d6cdf6fb77eac3c4a91f31bc0c8642b142f1a757512ab7849f9f70660" as const;
-const SUMMIT_ASSET_HUB_WS = "wss://paseo-asset-hub-next-rpc.polkadot.io"; // paseo-next AH (const name kept for diff-min)
+const SUMMIT_ASSET_HUB_GENESIS = "0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2" as const;
+const SUMMIT_ASSET_HUB_WS = "wss://asset-hub-paseo-rpc.n.dwellir.com"; // devnet AH 1000 (const name kept for diff-min)
 
 // ---------------------------------------------------------------------------
 // Permissions (RFC-0002)
