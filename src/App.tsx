@@ -524,7 +524,14 @@ function CreateSurvey({ account, onCreated }: {
             onCreated();
         } catch (err) {
             console.error("Create survey error:", err);
-            setStatusMsg(err instanceof Error ? `Failed: ${err.message}` : "Failed — check console");
+            const msg = err instanceof Error ? err.message : String(err);
+            // Creating a survey writes its definition to Bulletin as the signed-in
+            // user; on the testnet that account needs a storage allowance first.
+            setStatusMsg(
+                /allowance|not\s*authoriz|unauthoriz/i.test(msg)
+                    ? "Your account can't store on Bulletin yet — it needs a storage allowance on the testnet. Get one from the Bulletin faucet (paritytech.github.io/polkadot-bulletin-chain → Authorizations → Faucet), then try again."
+                    : `Couldn't create the survey: ${msg}`,
+            );
         } finally {
             setBusy(false);
         }
