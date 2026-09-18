@@ -127,10 +127,12 @@ jobs:
       # Summit so the SPA lists in the browse app-directory. Requires CLI >= 0.11.1
       # (earlier versions had no Summit Publisher address → --publish was a no-op).
       # 5Fk8 is the Publisher owner, so this publishes with no PoP gate / rate limit.
-      # deploy:frontend omits --config: the manifest leg would create app.survey.dot,
-      # and polkadot-app-deploy 0.16.6 still encodes the 4-field v0.6 SubnodeRecord
-      # that the v0.8.0 registry rejects. survey.dot has always been a plain
-      # (non-manifest) product on devnet.
+      # deploy:frontend passes --no-manifest: the manifest leg (auto-discovered from
+      # polkadot-app-deploy.config.ts) would create app.survey.dot, and
+      # polkadot-app-deploy 0.16.6 still encodes the 4-field v0.6 SubnodeRecord that
+      # the v0.8.0 registry rejects. survey.dot has always been a plain
+      # (non-manifest) product on devnet; --publish needs the manifest and the name
+      # is already listed.
       - name: Deploy frontend leg
         if: contains(github.event.inputs.legs, 'frontend')
         run: npm run deploy:frontend
