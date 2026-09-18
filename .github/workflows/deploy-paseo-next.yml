@@ -119,7 +119,7 @@ jobs:
       # ---- Frontend leg ----
       - name: Install deploy tool
         if: contains(github.event.inputs.legs, 'frontend')
-        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.12.1
+        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.16.6
 
       # Builds with the (now live) cdm.json address baked in, then uploads to
       # Summit Bulletin and binds survey.dot. --env paseo-next; direct signer = 5Fk8.
