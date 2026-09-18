@@ -33,6 +33,10 @@ jobs:
       # the built assets must embed the Summit RPC/gateway and must NOT contain
       # any "paseo" reference. (Lesson: a UI keeps its own network config —
       # verify the built artifact, not just the source.)
-      - name: Assert bundle targets devnet (Summit assert disabled)
+      - name: Assert bundle targets devnet
         run: |
-          echo "devnet targets public Paseo — Summit/paseo bundle assert intentionally disabled"
+          grep -raqi "d6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2" dist \
+            || { echo "::error::devnet Asset Hub genesis not found in bundle"; exit 1; }
+          grep -raqi "0x4a641d1530bb44bed8afa0e00a004eba106d02c0" dist \
+            || { echo "::error::devnet @polkadot/surveys address not found in bundle"; exit 1; }
+          echo "ok — bundle targets devnet"

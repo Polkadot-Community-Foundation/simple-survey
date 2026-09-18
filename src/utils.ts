@@ -1,29 +1,35 @@
 import { useState, useEffect } from "react";
 import {
-    createAccountsProvider,
-    preimageManager,
+    getAccountsProvider,
+    getPreimageManager,
     requestPermission,
-    createPapiProvider,
-    sandboxTransport,
-    type ProductAccount,
-} from "@novasamatech/host-api-wrapper";
-import { RequestCredentialsErr } from "@novasamatech/host-api";
+} from "@parity/product-sdk-host";
+import {
+    SignerManager,
+    HostProvider,
+    DevProvider,
+    HostUnavailableError,
+    NoAccountsError,
+    type SignerAccount,
+} from "@parity/product-sdk-signer";
+import { createChainClient } from "@parity/product-sdk-chain-client";
 import { ContractManager, ensureContractAccountMapped } from "@parity/product-sdk-contracts";
-import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
-import { ss58ToH160 } from "@parity/product-sdk-address";
-import { createClient, AccountId, type PolkadotSigner } from "polkadot-api";
-import { getWsProvider } from "@polkadot-api/ws-provider";
+import { devnet_asset_hub } from "@parity/product-sdk-descriptors/devnet-asset-hub";
+import type { PolkadotClient, PolkadotSigner } from "polkadot-api";
 import { blake2b } from "@noble/hashes/blake2.js";
 import { CID } from "multiformats/cid";
 import * as raw from "multiformats/codecs/raw";
 import type { MultihashDigest } from "multiformats/hashes/interface";
 
-const CONTRACT_KEY = "@polkadot/surveys";
+/** Unwrap a product-sdk `Result`, re-throwing its `err` channel. */
+function unwrapResult<T>(result: { ok: true; value: T } | { ok: false; error: unknown }): T {
+    if (!result.ok) {
+        throw result.error instanceof Error ? result.error : new Error(String(result.error));
+    }
+    return result.value;
+}
 
-// Summit Asset Hub (W3S) — the CDM registry and this contract live here.
-// Genesis + RPC per guides/CDM_DEPLOYMENT_GUIDE.md; descriptor = paseo_asset_hub.
-const SUMMIT_ASSET_HUB_GENESIS = "0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2" as const;
-const SUMMIT_ASSET_HUB_WS = "wss://asset-hub-paseo-rpc.n.dwellir.com"; // devnet AH 1000 (const name kept for diff-min)
+const CONTRACT_KEY = "@polkadot/surveys";
 
 // ---------------------------------------------------------------------------
 // Permissions (RFC-0002)
@@ -35,11 +41,11 @@ async function ensurePermission(tag: "ChainSubmit" | "PreimageSubmit" | "Stateme
     if (_grantedPermissions.has(tag)) return;
     try {
         const result = await requestPermission({ tag, value: undefined });
-        if (result.isOk() && result.value) {
+        if (result.ok && result.value) {
             _grantedPermissions.add(tag);
             console.log(`[Permission] ${tag} granted`);
         } else {
-            console.warn(`[Permission] ${tag} denied`, result.isErr() ? result.error : "user rejected");
+            console.warn(`[Permission] ${tag} denied`, result.ok ? "user rejected" : result.error);
         }
     } catch (err) {
         console.warn(`[Permission] ${tag} request failed:`, err);
@@ -47,11 +53,8 @@ async function ensurePermission(tag: "ChainSubmit" | "PreimageSubmit" | "Stateme
 }
 
 // ---------------------------------------------------------------------------
-// Account flow — direct against product-sdk (matches t3rminal / RPS pattern).
+// Account flow — @parity/product-sdk-signer (SignerManager + HostProvider).
 // ---------------------------------------------------------------------------
-
-const accountsProvider = createAccountsProvider(sandboxTransport);
-const accountIdCodec = AccountId();
 
 /**
  * Identifier the host uses to scope our product. Polkadot Desktop ≥ 0.7.5
@@ -69,6 +72,22 @@ export function getAppAccountId(): [string, number] {
     return [identifier, 0];
 }
 
+const [PRODUCT_ID, DERIVATION_INDEX] = getAppAccountId();
+
+/**
+ * HostProvider pins signing to `createTransaction`, so pallet-revive's signed
+ * extensions are forwarded to the host as opaque bytes.
+ */
+const signerManager = new SignerManager({
+    dappName: "survey",
+    createProvider: (type) =>
+        type === "host"
+            ? new HostProvider({
+                  productAccount: { dotNsIdentifier: PRODUCT_ID, derivationIndex: DERIVATION_INDEX },
+              })
+            : new DevProvider(),
+});
+
 export interface AppAccount {
     /** SS58 string derived from the host's product public key. */
     address: string;
@@ -79,7 +98,6 @@ export interface AppAccount {
     name: string | null;
     signer: PolkadotSigner;
     productAccountId: [string, number];
-    productAccount: ProductAccount;
     getSigner(): PolkadotSigner;
 }
 
@@ -107,61 +125,51 @@ export function useAccountState(): AccountState {
     return state;
 }
 
+function toAppAccount(sa: SignerAccount): AppAccount {
+    const signer = sa.getSigner();
+    return {
+        address: sa.address,
+        h160Address: sa.h160Address,
+        publicKey: sa.publicKey,
+        name: sa.name,
+        signer,
+        productAccountId: [PRODUCT_ID, DERIVATION_INDEX],
+        getSigner: () => signer,
+    };
+}
+
 export async function connectAccount(): Promise<void> {
     if (_state.status === "connecting") return;
     setState({ status: "connecting", account: null });
 
     try {
-        const [identifier, derivationIndex] = getAppAccountId();
-        console.log(`[Account] Requesting product account ${identifier}#${derivationIndex}`);
-
-        const result = await accountsProvider.getProductAccount(identifier, derivationIndex);
-        if (result.isErr()) {
-            if (result.error instanceof RequestCredentialsErr.NotConnected) {
+        console.log(`[Account] Requesting product account ${PRODUCT_ID}#${DERIVATION_INDEX}`);
+        const result = await signerManager.connect("host");
+        if (!result.ok) {
+            // Not inside a host / not signed in → prompt sign-in rather than error.
+            if (result.error instanceof HostUnavailableError || result.error instanceof NoAccountsError) {
                 setState({ status: "signed-out", account: null });
                 return;
             }
-            const errMsg = `${(result.error as any)?.tag ?? "Unknown"}: ${(result.error as any)?.value?.reason ?? String(result.error)}`;
-            console.warn("[Account] getProductAccount error:", errMsg);
-            setState({ status: "error", account: null, error: errMsg });
+            console.warn("[Account] connect error:", result.error.message);
+            setState({ status: "error", account: null, error: result.error.message });
+            return;
+        }
+        if (result.value.length === 0) {
+            setState({ status: "signed-out", account: null });
             return;
         }
 
-        const { publicKey } = result.value;
-        const productAccount: ProductAccount = { dotNsIdentifier: identifier, derivationIndex, publicKey };
-        // "createTransaction" signerType routes through the host's
-        // `host_create_transaction` RPC, the only path that signs Summit Asset Hub's
-        // pallet-revive signed extensions (AsPgas, AsRingAlias, …).
-        const signer = accountsProvider.getProductAccountSigner(productAccount, "createTransaction");
-        const ss58 = accountIdCodec.dec(publicKey);
-        const h160Address = ss58ToH160(ss58 as never) as `0x${string}`;
-
-        let displayName: string | null = null;
-        try {
-            const userIdResult = await accountsProvider.getUserId();
-            if (userIdResult.isOk()) {
-                displayName = (userIdResult.value as any).primaryUsername ?? null;
-            }
-        } catch { /* optional */ }
-
-        const account: AppAccount = {
-            address: ss58,
-            h160Address,
-            publicKey,
-            name: displayName,
-            signer,
-            productAccountId: [identifier, derivationIndex],
-            productAccount,
-            getSigner: () => signer,
-        };
+        const selected = signerManager.selectAccount(result.value[0].address);
+        const account = toAppAccount(selected.ok ? selected.value : result.value[0]);
 
         // Wire signer + origin defaults so queries don't fall back to the dev
         // origin and tx calls don't need an explicit `{ signer }`.
         if (_contractManager) {
-            _contractManager.setDefaults({ origin: ss58, signer });
+            _contractManager.setDefaults({ origin: account.address as never, signer: account.signer });
         }
 
-        console.log(`[Account] Ready — ${ss58} (h160 ${h160Address}) (${displayName ?? identifier})`);
+        console.log(`[Account] Ready — ${account.address} (h160 ${account.h160Address}) (${account.name ?? PRODUCT_ID})`);
         setState({ status: "ready", account });
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -172,7 +180,8 @@ export async function connectAccount(): Promise<void> {
 
 /** Open dotli's sign-in UI and refresh the account on success. */
 export async function signIn(): Promise<void> {
-    await accountsProvider.requestLogin("Sign in to use Surveys");
+    const accounts = await getAccountsProvider();
+    await accounts?.requestLogin("Sign in to use Surveys");
     await connectAccount();
 }
 
@@ -214,6 +223,10 @@ export async function uploadToBulletin(bytes: Uint8Array): Promise<string> {
     await ensurePermission("PreimageSubmit");
     const cid = calculateCID(bytes);
     console.log("[Bulletin] Submitting preimage via host, size:", bytes.length, "expected CID:", cid);
+    const preimageManager = await getPreimageManager();
+    if (!preimageManager) {
+        throw new Error("Preimage manager unavailable — open this app inside a Polkadot host.");
+    }
     await preimageManager.submit(bytes);
     console.log("[Bulletin] Preimage stored.");
     return cid;
@@ -228,7 +241,7 @@ export async function uploadToBulletin(bytes: Uint8Array): Promise<string> {
 
 let _contractManager: ContractManager | null = null;
 let _contract: any = null;
-let _polkadotClient: ReturnType<typeof createClient> | null = null;
+let _polkadotClient: PolkadotClient | null = null;
 let _cdmJson: any = null;
 let _contractInitPromise: Promise<void> | null = null;
 
@@ -299,20 +312,11 @@ async function ensureContractsReady(): Promise<void> {
     _contractInitPromise = (async () => {
         await ensurePermission("ChainSubmit");
 
-        // Asset Hub access:
-        //  - In dev (localhost) the host refuses to open a chain follow for the
-        //    unregistered domain, so `createPapiProvider` traps and the WS
-        //    fallback never fires. Bypass and go straight to WS.
-        //  - In a deployed `*.dot` app the host owns the follow; route through
-        //    `createPapiProvider` so signing/permissions stay coordinated.
-        const isDevHost =
-            typeof window !== "undefined" && /^localhost(:\d+)?$/.test(window.location.host);
-
-        const provider = isDevHost
-            ? getWsProvider(SUMMIT_ASSET_HUB_WS)
-            : createPapiProvider(SUMMIT_ASSET_HUB_GENESIS, getWsProvider(SUMMIT_ASSET_HUB_WS));
-        console.log(`[CDM] Asset Hub provider: ${isDevHost ? "direct WS (dev)" : "host with WS fallback (prod)"}`);
-        _polkadotClient = createClient(provider);
+        // Host-routed chain client: the descriptor's genesis selects the chain,
+        // so there are no endpoints to configure.
+        const chainClient = await createChainClient({ chains: { assetHub: devnet_asset_hub } });
+        _polkadotClient = chainClient.raw.assetHub;
+        console.log("[CDM] Asset Hub chain client ready (host-routed, devnet)");
 
         console.log("[CDM] Waking Asset Hub chain follow...");
         await _polkadotClient.getChainSpecData();
@@ -322,7 +326,7 @@ async function ensureContractsReady(): Promise<void> {
         _contractManager = ContractManager.fromClient(
             _cdmJson,
             _polkadotClient,
-            paseo_asset_hub,
+            devnet_asset_hub,
             _state.account
                 ? { defaultOrigin: _state.account.address as never, defaultSigner: _state.account.signer }
                 : undefined,
@@ -350,7 +354,10 @@ export function getContract(): any {
                         if (!_contract) throw new Error("Contract init failed");
                         const real = _contract[prop as string];
                         if (!real) throw new Error(`Unknown method: ${String(prop)}`);
-                        return real[methodProp](...args);
+                        // `.tx(...)` returns a Result since product-sdk 0.18; unwrap so
+                        // call sites keep their try/catch flow.
+                        const outcome = await real[methodProp](...args);
+                        return methodProp === "tx" ? unwrapResult(outcome) : outcome;
                     };
                 },
             });
@@ -371,10 +378,12 @@ export async function ensureMapping(account: AppAccount): Promise<void> {
     await ensureContractsReady();
     if (!_contractManager) throw new Error("Contract manager not ready");
     try {
-        const mapped = await ensureContractAccountMapped(
-            _contractManager.getRuntime(),
-            account.address as never,
-            account.signer,
+        const mapped = unwrapResult(
+            await ensureContractAccountMapped(
+                _contractManager.getRuntime(),
+                account.address as never,
+                account.signer,
+            ),
         );
         if (mapped === null) {
             console.log(`[Revive] Account ${account.address} already mapped`);
@@ -396,7 +405,7 @@ export async function ensureMapping(account: AppAccount): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const GATEWAYS = [
-    "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
+    "https://devnet-ipfs.api.polkadotcommunity.foundation/ipfs/",
     "https://dweb.link/ipfs/",
     "https://ipfs.io/ipfs/",
     "https://nftstorage.link/ipfs/",
